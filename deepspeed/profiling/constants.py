@@ -37,3 +37,26 @@ FLOPS_PROFILER_MODULE_DEPTH_DEFAULT = -1
 
 FLOPS_PROFILER_TOP_MODULES = "top_modules"
 FLOPS_PROFILER_TOP_MODULES_DEFAULT = 3
+
+#########################################
+# XSP: across-stack profiler
+#########################################
+# XSP. By default, this feature is not enabled.
+# Users can configure in ds_config.json as below example:
+XSP_FORMAT = '''
+xsp should be enabled as:
+"session_params": {
+  "xsp": {
+    "enalbe": [true|false],
+    "level": 0,
+    }
+}
+'''
+
+XSP = "xsp"
+
+XSP_ENABLED = "enabled"
+XSP_ENABLED_DEFAULT = False
+
+XSP_LEVEL = "level"
+XSP_LEVEL_DEFAULT = 0

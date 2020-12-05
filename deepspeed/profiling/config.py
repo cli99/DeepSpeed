@@ -50,3 +50,22 @@ class DeepSpeedFlopsProfilerConfig(object):
         self.top_modules = get_scalar_param(flops_profiler_dict,
                                             FLOPS_PROFILER_TOP_MODULES,
                                             FLOPS_PROFILER_TOP_MODULES_DEFAULT)
+
+
+class DeepSpeedXSPConfig(object):
+    def __init__(self, param_dict):
+        super(DeepSpeedXSPConfig, self).__init__()
+
+        self.enabled = None
+        self.level = None
+
+        if XSP in param_dict.keys():
+            xsp_dict = param_dict[XSP]
+        else:
+            xsp_dict = {}
+
+        self._initialize(xsp_dict)
+
+    def _initialize(self, xsp_dict):
+        self.enabled = get_scalar_param(xsp_dict, XSP_ENABLED, XSP_ENABLED_DEFAULT)
+        self.level = get_scalar_param(xsp_dict, XSP_LEVEL, XSP_LEVEL_DEFAULT)

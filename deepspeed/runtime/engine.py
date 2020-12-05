@@ -39,6 +39,7 @@ from ..ops.adam import DeepSpeedCPUAdam
 from ..ops.adam import FusedAdam
 
 from deepspeed.profiling.flops_profiler.profiler import FlopsProfiler
+import deepspeed.profiling.xsp.tracer as xsp
 
 MEMORY_OPT_ALLREDUCE_SIZE = 500000000
 
@@ -124,6 +125,17 @@ class DeepSpeedEngine(Module):
         self.enable_backward_allreduce = True
         self.progressive_layer_drop = None
 
+        self._do_args_sanity_check(args)
+        self._configure_with_arguments(args, mpu)
+        self._do_sanity_check()
+
+        if self.xsp_enabled():
+            xsp.init()
+            # print(xsp.get_tracer())
+            self.tracer = xsp.get_tracer()
+            # print(xsp.tracer)
+            self.init_span = self.tracer.start_span("init", child_of=xsp.root_span)
+
         if dist_init_required is None:
             dist_init_required = not dist.is_initialized()
 
@@ -142,10 +154,6 @@ class DeepSpeedEngine(Module):
                 logger.warning(
                     "Was given dist_init_required=True but detected that torch"
                     "distributed was already initialized, cannot initialize twice.")
-
-        self._do_args_sanity_check(args)
-        self._configure_with_arguments(args, mpu)
-        self._do_sanity_check()
 
         self._init_distributed(dist_init_required)
 
@@ -203,6 +211,9 @@ class DeepSpeedEngine(Module):
         util_ops = UtilsBuilder().load()
         self.flatten = util_ops.flatten
         self.unflatten = util_ops.unflatten
+
+        if self.xsp_enabled():
+            self.init_span.finish()
 
     def _in_aml(self):
         # read and environment variable to detect if we are using an Azure ML environment
@@ -351,6 +362,14 @@ class DeepSpeedEngine(Module):
 
     def flops_profiler_top_modules(self):
         return self._config.flops_profiler_config.top_modules
+
+    def xsp_enabled(self):
+        return self._config.xsp_config.enabled
+        return False
+
+    def xsp_level(self):
+        # return False
+        return self._config.xsp_config.level
 
     def memory_breakdown(self):
         return self._config.memory_breakdown
@@ -887,7 +906,18 @@ class DeepSpeedEngine(Module):
 
         if self.training_dataloader is None:
             self.tput_timer.start()
+
+        if self.xsp_enabled():
+            tracer = xsp.get_tracer()
+            self.fwd_span = tracer.start_span(
+                "forward",
+                tags={"module_name": type(self.module).__name__},
+                child_of=xsp.root_span)
+
         loss = self.module(*inputs, **kwargs)
+
+        if self.xsp_enabled():
+            self.fwd_span.finish()
 
         if self.wall_clock_breakdown():
             self.timers('forward').stop()
@@ -943,6 +973,13 @@ class DeepSpeedEngine(Module):
         assert self.optimizer is not None, "must provide optimizer during " \
                                            "init in order to use backward"
 
+        if self.xsp_enabled():
+            tracer = xsp.get_tracer()
+            self.bwd_span = tracer.start_span(
+                "backward",
+                tags={"module_name": type(self.module).__name__},
+                child_of=xsp.root_span)
+
         if self.wall_clock_breakdown():
             self.timers('backward_inner_microstep').start()
             self.timers('backward_inner').start()
@@ -972,8 +1009,21 @@ class DeepSpeedEngine(Module):
             self.timers('backward_allreduce_microstep').start()
             self.timers('backward_allreduce').start()
 
+        if self.xsp_enabled():
+            tracer = xsp.get_tracer()
+            self.allred_span = tracer.start_span(
+                "allreduce",
+                tags={"module_name": type(self.module).__name__},
+                child_of=self.bwd_span)
+
         if allreduce_gradients and self.enable_backward_allreduce:
             self.allreduce_gradients()
+
+        if self.xsp_enabled():
+            self.allred_span.finish()
+
+        if self.xsp_enabled():
+            self.bwd_span.finish()
 
         if self.wall_clock_breakdown():
             self.timers('backward_allreduce').stop()
@@ -1055,6 +1105,13 @@ class DeepSpeedEngine(Module):
             self.timers('step_microstep').start()
             self.timers('step').start()
 
+        if self.xsp_enabled():
+            tracer = xsp.get_tracer()
+            self.step_span = tracer.start_span(
+                "step",
+                tags={"module_name": type(self.module).__name__},
+                child_of=xsp.root_span)
+
         assert self.optimizer is not None, "must provide optimizer during " \
                                            "init in order to use step"
         report_progress = self.global_rank == 0 if self.global_rank else True
@@ -1084,6 +1141,9 @@ class DeepSpeedEngine(Module):
                     for event in self.summary_events:  # write_summary_events
                         self.summary_writer.add_scalar(event[0], event[1], event[2])
                     self.summary_writer.flush()
+
+        if self.xsp_enabled():
+            self.step_span.finish()
 
         if self.wall_clock_breakdown():
             self.timers('step').stop()
