@@ -604,10 +604,14 @@ class FP16_DeepSpeedZeroOptimizer_Stage1(object):
                         for partition in single_comm_all_partitions:
                             partition.mul_(1. / gradient_predivide_factor)
 
-                    dist.reduce_scatter(output=single_comm_all_partitions[local_rank],
-                                        input_list=single_comm_all_partitions,
-                                        group=self.dp_process_group)
-
+                    XXXdist.reduce_scatter(output=single_comm_all_partitions[local_rank],
+                                           input_list=single_comm_all_partitions,
+                                           group=self.dp_process_group)
+                    # data size, rank, iteration,
+                    # size of the tensors,
+                    # input: sum of all the elements
+                    # output: single element
+                    # group, comm_idx
                     if gradient_average:
                         # Only need to average our local grads in post scaling
                         if gradient_predivide_factor != world_size:
@@ -617,9 +621,9 @@ class FP16_DeepSpeedZeroOptimizer_Stage1(object):
                     for partition in single_comm_all_partitions:
                         partition.div_(world_size)
 
-                    dist.reduce_scatter(output=single_comm_all_partitions[local_rank],
-                                        input_list=single_comm_all_partitions,
-                                        group=self.dp_process_group)
+                    XXXdist.reduce_scatter(output=single_comm_all_partitions[local_rank],
+                                           input_list=single_comm_all_partitions,
+                                           group=self.dp_process_group)
 
     def step(self, closure=None):
         # First compute norm for all group so we know if there is overflow
@@ -693,10 +697,10 @@ class FP16_DeepSpeedZeroOptimizer_Stage1(object):
         #gather the updated weights from everyone
         for fp16_all_sub_partitions in self.parallel_comm_sub_partitioned_fp16_groups:
             for comm_id, sub_partitions in enumerate(fp16_all_sub_partitions):
-                dist.all_gather(sub_partitions,
-                                sub_partitions[partition_id],
-                                group=self.dp_process_group)
-
+                XXXdist.all_gather(sub_partitions,
+                                   sub_partitions[partition_id],
+                                   group=self.dp_process_group)
+                # comm_id. similar to reduce
         # TODO: we probably don't need this? just to be safe
         for i in range(len(norm_groups)):
             updated_params = _unflatten_dense_tensors(self.fp16_groups_flat[i],

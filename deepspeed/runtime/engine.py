@@ -39,7 +39,9 @@ from ..ops.adam import DeepSpeedCPUAdam
 from ..ops.adam import FusedAdam
 
 from deepspeed.profiling.flops_profiler.profiler import FlopsProfiler
-import deepspeed.profiling.xsp.tracer as xsp
+from deepspeed.profiling.xsp.tracer import XSP, TraceLevel, NoOpSpan
+# import deepspeed.profiling.xsp.framework as torchprof
+import time
 
 MEMORY_OPT_ALLREDUCE_SIZE = 500000000
 
@@ -129,12 +131,9 @@ class DeepSpeedEngine(Module):
         self._configure_with_arguments(args, mpu)
         self._do_sanity_check()
 
-        if self.xsp_enabled():
-            xsp.init()
-            # print(xsp.get_tracer())
-            self.tracer = xsp.get_tracer()
-            # print(xsp.tracer)
-            self.init_span = self.tracer.start_span("init", child_of=xsp.root_span)
+        self.xsp = XSP(self.xsp_level())
+
+        # init_span = self.xsp.start_span(TraceLevel.MODEL, "init", child_of=self.xsp.root_span)
 
         if dist_init_required is None:
             dist_init_required = not dist.is_initialized()
@@ -212,8 +211,8 @@ class DeepSpeedEngine(Module):
         self.flatten = util_ops.flatten
         self.unflatten = util_ops.unflatten
 
-        if self.xsp_enabled():
-            self.init_span.finish()
+        # init_span.finish()
+        self.xsp.start_profile()
 
     def _in_aml(self):
         # read and environment variable to detect if we are using an Azure ML environment
@@ -365,11 +364,9 @@ class DeepSpeedEngine(Module):
 
     def xsp_enabled(self):
         return self._config.xsp_config.enabled
-        return False
 
     def xsp_level(self):
-        # return False
-        return self._config.xsp_config.level
+        return 0 if self.xsp_enabled() == False else self._config.xsp_config.level
 
     def memory_breakdown(self):
         return self._config.memory_breakdown
@@ -907,17 +904,33 @@ class DeepSpeedEngine(Module):
         if self.training_dataloader is None:
             self.tput_timer.start()
 
-        if self.xsp_enabled():
-            tracer = xsp.get_tracer()
-            self.fwd_span = tracer.start_span(
-                "forward",
-                tags={"module_name": type(self.module).__name__},
-                child_of=xsp.root_span)
+        fwd_span = self.xsp.start_span(TraceLevel.MODEL,
+                                       "forward",
+                                       tags={"module_name": type(self.module).__name__},
+                                       child_of=self.xsp.root_span)
 
-        loss = self.module(*inputs, **kwargs)
+        with torch.autograd.profiler.profile(
+                enabled=True or self.xsp_level() >= TraceLevel.FRAMEWORK) as prof:
+            self.xsp.start_time = time.time()
+            loss = self.module(*inputs, **kwargs)
+        # print(prof.key_averages().table(sort_by="self_cpu_time_total"))
 
-        if self.xsp_enabled():
-            self.fwd_span.finish()
+        if prof is not None:
+            for event in prof.function_events:
+                span = self.xsp.start_span(
+                    TraceLevel.FRAMEWORK,
+                    event.name,
+                    tags={
+                        "module_name": type(self.module).__name__,
+                        'node_id': event.node_id,
+                        'thread_id': event.thread
+                    },
+                    child_of=fwd_span,
+                    start_time=self.xsp.start_time + event.cpu_interval.start / 1000000,
+                )
+                span.finish(finish_time=self.xsp.start_time +
+                            event.cpu_interval.end / 1000000)
+        fwd_span.finish()
 
         if self.wall_clock_breakdown():
             self.timers('forward').stop()
@@ -973,17 +986,17 @@ class DeepSpeedEngine(Module):
         assert self.optimizer is not None, "must provide optimizer during " \
                                            "init in order to use backward"
 
-        if self.xsp_enabled():
-            tracer = xsp.get_tracer()
-            self.bwd_span = tracer.start_span(
-                "backward",
-                tags={"module_name": type(self.module).__name__},
-                child_of=xsp.root_span)
+        bwd_span = self.xsp.start_span(TraceLevel.MODEL,
+                                       "backward",
+                                       tags={"module_name": type(self.module).__name__},
+                                       child_of=self.xsp.root_span)
 
         if self.wall_clock_breakdown():
             self.timers('backward_inner_microstep').start()
             self.timers('backward_inner').start()
 
+        # with torchprof.Profile(self.module, xsp.get_tracer(), use_cuda=False) as prof:
+        # with torch.autograd.profiler.profile(self.module, use_cuda=False) as prof:
         if self.zero_optimization():
             self.optimizer.is_gradient_accumulation_boundary = self.is_gradient_accumulation_boundary(
             )
@@ -1000,6 +1013,7 @@ class DeepSpeedEngine(Module):
             self.optimizer.backward(loss)
         else:
             loss.backward()
+        # prof.export_chrome_trace("test.json")
 
         if self.wall_clock_breakdown():
             self.timers('backward_inner').stop()
@@ -1009,21 +1023,17 @@ class DeepSpeedEngine(Module):
             self.timers('backward_allreduce_microstep').start()
             self.timers('backward_allreduce').start()
 
-        if self.xsp_enabled():
-            tracer = xsp.get_tracer()
-            self.allred_span = tracer.start_span(
-                "allreduce",
-                tags={"module_name": type(self.module).__name__},
-                child_of=self.bwd_span)
+        allred_span = self.xsp.start_span(
+            TraceLevel.MODEL,
+            "allreduce",
+            tags={"module_name": type(self.module).__name__},
+            child_of=bwd_span)
 
         if allreduce_gradients and self.enable_backward_allreduce:
             self.allreduce_gradients()
 
-        if self.xsp_enabled():
-            self.allred_span.finish()
-
-        if self.xsp_enabled():
-            self.bwd_span.finish()
+        allred_span.finish()
+        bwd_span.finish()
 
         if self.wall_clock_breakdown():
             self.timers('backward_allreduce').stop()
@@ -1105,12 +1115,10 @@ class DeepSpeedEngine(Module):
             self.timers('step_microstep').start()
             self.timers('step').start()
 
-        if self.xsp_enabled():
-            tracer = xsp.get_tracer()
-            self.step_span = tracer.start_span(
-                "step",
-                tags={"module_name": type(self.module).__name__},
-                child_of=xsp.root_span)
+        step_span = self.xsp.start_span(TraceLevel.MODEL,
+                                        "step",
+                                        tags={"module_name": type(self.module).__name__},
+                                        child_of=self.xsp.root_span)
 
         assert self.optimizer is not None, "must provide optimizer during " \
                                            "init in order to use step"
@@ -1142,8 +1150,7 @@ class DeepSpeedEngine(Module):
                         self.summary_writer.add_scalar(event[0], event[1], event[2])
                     self.summary_writer.flush()
 
-        if self.xsp_enabled():
-            self.step_span.finish()
+        step_span.finish()
 
         if self.wall_clock_breakdown():
             self.timers('step').stop()
