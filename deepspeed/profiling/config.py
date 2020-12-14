@@ -69,3 +69,8 @@ class DeepSpeedXSPConfig(object):
     def _initialize(self, xsp_dict):
         self.enabled = get_scalar_param(xsp_dict, XSP_ENABLED, XSP_ENABLED_DEFAULT)
         self.level = get_scalar_param(xsp_dict, XSP_LEVEL, XSP_LEVEL_DEFAULT)
+        self.start_step = get_scalar_param(xsp_dict,
+                                           XSP_START_STEP,
+                                           XSP_START_STEP_DEFAULT)
+
+        self.end_step = get_scalar_param(xsp_dict, XSP_END_STEP, XSP_END_STEP_DEFAULT)

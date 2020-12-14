@@ -212,7 +212,7 @@ class DeepSpeedEngine(Module):
         self.unflatten = util_ops.unflatten
 
         # init_span.finish()
-        self.xsp.start_profile()
+        # self.xsp.start_profile()
 
     def _in_aml(self):
         # read and environment variable to detect if we are using an Azure ML environment
@@ -367,6 +367,16 @@ class DeepSpeedEngine(Module):
 
     def xsp_level(self):
         return 0 if self.xsp_enabled() == False else self._config.xsp_config.level
+
+    def xsp_start_step(self):
+        return self._config.xsp_config.start_step
+
+    def xsp_end_step(self):
+        return self._config.xsp_config.end_step
+
+    def xsp_profile_step(self):
+        return self.xsp_enabled() and self.global_steps >= self.xsp_start_step(
+        ) and self.global_steps <= self.xsp_end_step()
 
     def memory_breakdown(self):
         return self._config.memory_breakdown
@@ -894,6 +904,12 @@ class DeepSpeedEngine(Module):
             self.flops_profiler.params = self.flops_profiler.get_total_params()
             self.flops_profiler.end_profile()
 
+        if self.xsp_enabled() and self.global_steps == self.xsp_start_step():
+            self.xsp.start_profile()
+
+        if self.xsp_enabled() and self.global_steps == self.xsp_end_step():
+            self.xsp.end_profile()
+
         if self.module.training and self.progressive_layer_drop:
             kwargs.update(self.progressive_layer_drop.get_state())
 
@@ -904,32 +920,39 @@ class DeepSpeedEngine(Module):
         if self.training_dataloader is None:
             self.tput_timer.start()
 
-        fwd_span = self.xsp.start_span(TraceLevel.MODEL,
-                                       "forward",
-                                       tags={"module_name": type(self.module).__name__},
-                                       child_of=self.xsp.root_span)
+        fwd_span = NoOpSpan
+        if self.xsp_profile_step():
+            fwd_span = self.xsp.start_span(
+                TraceLevel.MODEL,
+                "forward",
+                tags={"module_name": type(self.module).__name__},
+                child_of=self.xsp.root_span)
 
-        with torch.autograd.profiler.profile(
-                enabled=True or self.xsp_level() >= TraceLevel.FRAMEWORK) as prof:
-            self.xsp.start_time = time.time()
+            with torch.autograd.profiler.profile(
+                    self.xsp_level() >= TraceLevel.FRAMEWORK) as prof:
+                self.xsp.start_time = time.time()
+                loss = self.module(*inputs, **kwargs)
+            # print(prof.key_averages().table(sort_by="self_cpu_time_total"))
+
+            if prof is not None:
+                for event in prof.function_events:
+                    span = self.xsp.start_span(
+                        TraceLevel.FRAMEWORK,
+                        event.name,
+                        tags={
+                            "module_name": type(self.module).__name__,
+                            'node_id': event.node_id,
+                            'thread_id': event.thread
+                        },
+                        child_of=fwd_span,
+                        start_time=self.xsp.start_time +
+                        event.cpu_interval.start / 1000000,
+                    )
+                    span.finish(finish_time=self.xsp.start_time +
+                                event.cpu_interval.end / 1000000)
+        else:
             loss = self.module(*inputs, **kwargs)
-        # print(prof.key_averages().table(sort_by="self_cpu_time_total"))
 
-        if prof is not None:
-            for event in prof.function_events:
-                span = self.xsp.start_span(
-                    TraceLevel.FRAMEWORK,
-                    event.name,
-                    tags={
-                        "module_name": type(self.module).__name__,
-                        'node_id': event.node_id,
-                        'thread_id': event.thread
-                    },
-                    child_of=fwd_span,
-                    start_time=self.xsp.start_time + event.cpu_interval.start / 1000000,
-                )
-                span.finish(finish_time=self.xsp.start_time +
-                            event.cpu_interval.end / 1000000)
         fwd_span.finish()
 
         if self.wall_clock_breakdown():
@@ -986,10 +1009,13 @@ class DeepSpeedEngine(Module):
         assert self.optimizer is not None, "must provide optimizer during " \
                                            "init in order to use backward"
 
-        bwd_span = self.xsp.start_span(TraceLevel.MODEL,
-                                       "backward",
-                                       tags={"module_name": type(self.module).__name__},
-                                       child_of=self.xsp.root_span)
+        bwd_span = NoOpSpan
+        if self.xsp_profile_step():
+            bwd_span = self.xsp.start_span(
+                TraceLevel.MODEL,
+                "backward",
+                tags={"module_name": type(self.module).__name__},
+                child_of=self.xsp.root_span)
 
         if self.wall_clock_breakdown():
             self.timers('backward_inner_microstep').start()
@@ -1023,11 +1049,13 @@ class DeepSpeedEngine(Module):
             self.timers('backward_allreduce_microstep').start()
             self.timers('backward_allreduce').start()
 
-        allred_span = self.xsp.start_span(
-            TraceLevel.MODEL,
-            "allreduce",
-            tags={"module_name": type(self.module).__name__},
-            child_of=bwd_span)
+        allred_span = NoOpSpan
+        if self.xsp_profile_step():
+            allred_span = self.xsp.start_span(
+                TraceLevel.MODEL,
+                "allreduce",
+                tags={"module_name": type(self.module).__name__},
+                child_of=bwd_span)
 
         if allreduce_gradients and self.enable_backward_allreduce:
             self.allreduce_gradients()
@@ -1115,10 +1143,13 @@ class DeepSpeedEngine(Module):
             self.timers('step_microstep').start()
             self.timers('step').start()
 
-        step_span = self.xsp.start_span(TraceLevel.MODEL,
-                                        "step",
-                                        tags={"module_name": type(self.module).__name__},
-                                        child_of=self.xsp.root_span)
+        step_span = NoOpSpan
+        if self.xsp_profile_step():
+            step_span = self.xsp.start_span(
+                TraceLevel.MODEL,
+                "step",
+                tags={"module_name": type(self.module).__name__},
+                child_of=self.xsp.root_span)
 
         assert self.optimizer is not None, "must provide optimizer during " \
                                            "init in order to use step"

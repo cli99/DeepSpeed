@@ -53,7 +53,7 @@ class XSP:
         self.spans = {}
         self.tracer = _init(service)
         self.level = level
-        atexit.register(self.close)
+        # atexit.register(self.close)
 
     def start_span(self, level, *args, **kwargs):
         if level > self.level:
@@ -69,10 +69,10 @@ class XSP:
 
     def end_profile(self, *args, **kwargs):
         self.root_span.finish()
+        self.close()
 
     def close(self):
         print("closing tracer...")
-        self.end_profile()
         time.sleep(1)
         self.tracer.close()
 

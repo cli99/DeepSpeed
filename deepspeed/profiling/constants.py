@@ -49,6 +49,8 @@ xsp should be enabled as:
   "xsp": {
     "enalbe": [true|false],
     "level": 0,
+    "start_step": 5,
+    "end_step": 6,
     }
 }
 '''
@@ -60,3 +62,9 @@ XSP_ENABLED_DEFAULT = False
 
 XSP_LEVEL = "level"
 XSP_LEVEL_DEFAULT = 0
+
+XSP_START_STEP = "start_step"
+XSP_START_STEP_DEFAULT = 5
+
+XSP_END_STEP = "end_step"
+XSP_END_STEP_DEFAULT = XSP_START_STEP_DEFAULT + 1
