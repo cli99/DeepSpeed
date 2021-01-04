@@ -133,6 +133,7 @@ class DeepSpeedEngine(Module):
 
         self.xsp = XSP(self.xsp_level())
 
+        # if self.xsp.started:
         # init_span = self.xsp.start_span(TraceLevel.MODEL, "init", child_of=self.xsp.root_span)
 
         if dist_init_required is None:
@@ -373,10 +374,6 @@ class DeepSpeedEngine(Module):
 
     def xsp_end_step(self):
         return self._config.xsp_config.end_step
-
-    def xsp_profile_step(self):
-        return self.xsp_enabled() and self.global_steps >= self.xsp_start_step(
-        ) and self.global_steps <= self.xsp_end_step()
 
     def memory_breakdown(self):
         return self._config.memory_breakdown
@@ -904,12 +901,6 @@ class DeepSpeedEngine(Module):
             self.flops_profiler.params = self.flops_profiler.get_total_params()
             self.flops_profiler.end_profile()
 
-        if self.xsp_enabled() and self.global_steps == self.xsp_start_step():
-            self.xsp.start_profile()
-
-        if self.xsp_enabled() and self.global_steps == self.xsp_end_step():
-            self.xsp.end_profile()
-
         if self.module.training and self.progressive_layer_drop:
             kwargs.update(self.progressive_layer_drop.get_state())
 
@@ -921,7 +912,7 @@ class DeepSpeedEngine(Module):
             self.tput_timer.start()
 
         fwd_span = NoOpSpan
-        if self.xsp_profile_step():
+        if self.xsp.started:
             fwd_span = self.xsp.start_span(
                 TraceLevel.MODEL,
                 "forward",
@@ -929,7 +920,8 @@ class DeepSpeedEngine(Module):
                 child_of=self.xsp.root_span)
 
             with torch.autograd.profiler.profile(
-                    self.xsp_level() >= TraceLevel.FRAMEWORK) as prof:
+                    self.xsp_level() >= TraceLevel.FRAMEWORK,
+                    use_cuda=False) as prof:
                 self.xsp.start_time = time.time()
                 loss = self.module(*inputs, **kwargs)
             # print(prof.key_averages().table(sort_by="self_cpu_time_total"))
@@ -1010,7 +1002,7 @@ class DeepSpeedEngine(Module):
                                            "init in order to use backward"
 
         bwd_span = NoOpSpan
-        if self.xsp_profile_step():
+        if self.xsp.started:
             bwd_span = self.xsp.start_span(
                 TraceLevel.MODEL,
                 "backward",
@@ -1050,7 +1042,7 @@ class DeepSpeedEngine(Module):
             self.timers('backward_allreduce').start()
 
         allred_span = NoOpSpan
-        if self.xsp_profile_step():
+        if self.xsp.started:
             allred_span = self.xsp.start_span(
                 TraceLevel.MODEL,
                 "allreduce",
@@ -1144,7 +1136,7 @@ class DeepSpeedEngine(Module):
             self.timers('step').start()
 
         step_span = NoOpSpan
-        if self.xsp_profile_step():
+        if self.xsp.started:
             step_span = self.xsp.start_span(
                 TraceLevel.MODEL,
                 "step",
