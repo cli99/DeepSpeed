@@ -30,7 +30,7 @@ from deepspeed.runtime.zero.constants import \
 from deepspeed.runtime.csr_tensor import CSRTensor
 import deepspeed.runtime.lr_schedules as lr_schedules
 from deepspeed.utils import logger, log_dist
-from deepspeed.utils.timer import ThroughputTimer, SynchronizedWallClockTimer
+from deepspeed.utils.timer import ThroughputTimer, SynchronizedWallClockTimer, print_rank_0
 from deepspeed.runtime.progressive_layer_drop import ProgressiveLayerDrop
 
 from .utils import ensure_directory_exists
@@ -132,9 +132,25 @@ class DeepSpeedEngine(Module):
         self._do_sanity_check()
 
         self.xsp = XSP(self.xsp_level())
+        # import json
+        # tracer_json = json.dumps(self.xsp.tracer)
+        # print_rank_0(tracer_json)
+        # print("FDSFSDFDSFDSF ISDFDSFDSFDSF AM HERE")
 
-        # if self.xsp.started:
-        # init_span = self.xsp.start_span(TraceLevel.MODEL, "init", child_of=self.xsp.root_span)
+        # root_span = self.xsp.root_span
+        # tens = torch.tensor(root_span, device=torch.cuda())
+        # torch.distributed.broadcast(tens, src=0)
+        # root_span = int(tens.item())
+        # self.xsp.root_span = root_span
+        # init_span = self.xsp.start_span(TraceLevel.MODEL,
+        #                                 "init",
+        #                                 child_of=self.xsp.root_span)
+
+        # server_store = dist.TCPStore("127.0.0.1", 0, true, timedelta(seconds=30))
+        # client_store = dist.TCPStore("127.0.0.1", 0, false)
+        # # Use any of the store methods from either the client or server after initialization
+        # server_store.set("first_key", "first_value")
+        # client_store.get("first_key")
 
         if dist_init_required is None:
             dist_init_required = not dist.is_initialized()
@@ -374,6 +390,10 @@ class DeepSpeedEngine(Module):
 
     def xsp_end_step(self):
         return self._config.xsp_config.end_step
+
+    def xsp_profile_step(self):
+        return self.xsp_enabled() and self.global_steps >= self.xsp_start_step(
+        ) and self.global_steps <= self.xsp_end_step()
 
     def memory_breakdown(self):
         return self._config.memory_breakdown
@@ -659,8 +679,8 @@ class DeepSpeedEngine(Module):
             self.optimizer = self._configure_fp16_optimizer(basic_optimizer)
         else:
             self.optimizer = basic_optimizer
-        logger.info('DeepSpeed Final Optimizer = {}'.format(self.optimizer))
-        logger.info('DeepSpeed Final Optimizer = {}'.format(self.optimizer.state_dict()))
+        # logger.info('DeepSpeed Final Optimizer = {}'.format(self.optimizer))
+        # logger.info('DeepSpeed Final Optimizer = {}'.format(self.optimizer.state_dict()))
 
     def _configure_basic_optimizer(self, model_parameters):
         optimizer_parameters = self.optimizer_params()
@@ -911,28 +931,44 @@ class DeepSpeedEngine(Module):
         if self.training_dataloader is None:
             self.tput_timer.start()
 
+        if self.xsp_enabled(
+        ) and not self.xsp.started and self.global_steps == self.xsp_start_step():
+            self.xsp.start_profile()
+
+            # root_span = self.xsp.root_span
+            # tsr = torch.tensor(root_span, device=torch.cuda())
+            # torch.distributed.broadcast(tsr, src=0)
+            # root_span = int(tsr.item())
+            # self.xsp.root_span = root_span
+
         fwd_span = NoOpSpan
-        if self.xsp.started:
+        if self.xsp_profile_step():
             fwd_span = self.xsp.start_span(
                 TraceLevel.MODEL,
                 "forward",
                 tags={"module_name": type(self.module).__name__},
                 child_of=self.xsp.root_span)
 
+            # Enabling memory profiling or source attribution incurs additional profiler overhead
             with torch.autograd.profiler.profile(
                     self.xsp_level() >= TraceLevel.FRAMEWORK,
-                    use_cuda=False) as prof:
-                self.xsp.start_time = time.time()
+                    use_cuda=False,
+                    with_stack=True,
+                    profile_memory=False) as prof:
+                # self.xsp.start_time = time.time()
                 loss = self.module(*inputs, **kwargs)
             # print(prof.key_averages().table(sort_by="self_cpu_time_total"))
 
             if prof is not None:
+                max_src_column_width = 75
                 for event in prof.function_events:
+                    if (event.cpu_interval.end - event.cpu_interval.start) < 1000:
+                        continue
                     span = self.xsp.start_span(
                         TraceLevel.FRAMEWORK,
                         event.name,
                         tags={
-                            "module_name": type(self.module).__name__,
+                            "source": event.stack[0],
                             'node_id': event.node_id,
                             'thread_id': event.thread
                         },
@@ -944,7 +980,7 @@ class DeepSpeedEngine(Module):
                                 event.cpu_interval.end / 1000000)
         else:
             loss = self.module(*inputs, **kwargs)
-
+        # time.sleep(1)
         fwd_span.finish()
 
         if self.wall_clock_breakdown():
@@ -1002,7 +1038,7 @@ class DeepSpeedEngine(Module):
                                            "init in order to use backward"
 
         bwd_span = NoOpSpan
-        if self.xsp.started:
+        if self.xsp_profile_step():
             bwd_span = self.xsp.start_span(
                 TraceLevel.MODEL,
                 "backward",
@@ -1042,12 +1078,13 @@ class DeepSpeedEngine(Module):
             self.timers('backward_allreduce').start()
 
         allred_span = NoOpSpan
-        if self.xsp.started:
+        if self.xsp_profile_step():
             allred_span = self.xsp.start_span(
                 TraceLevel.MODEL,
                 "allreduce",
                 tags={"module_name": type(self.module).__name__},
-                child_of=bwd_span)
+                child_of=bwd_span,
+            )
 
         if allreduce_gradients and self.enable_backward_allreduce:
             self.allreduce_gradients()
@@ -1136,7 +1173,7 @@ class DeepSpeedEngine(Module):
             self.timers('step').start()
 
         step_span = NoOpSpan
-        if self.xsp.started:
+        if self.xsp_profile_step():
             step_span = self.xsp.start_span(
                 TraceLevel.MODEL,
                 "step",
@@ -1156,6 +1193,11 @@ class DeepSpeedEngine(Module):
 
         self.tput_timer.stop(report_progress)
 
+        step_span.finish()
+
+        if self.xsp.started and self.global_steps == self.xsp_end_step():
+            self.xsp.end_profile()
+
         # Log learning rate
         if self.tensorboard_enabled():
             if self.is_gradient_accumulation_boundary():
@@ -1172,8 +1214,6 @@ class DeepSpeedEngine(Module):
                     for event in self.summary_events:  # write_summary_events
                         self.summary_writer.add_scalar(event[0], event[1], event[2])
                     self.summary_writer.flush()
-
-        step_span.finish()
 
         if self.wall_clock_breakdown():
             self.timers('step').stop()

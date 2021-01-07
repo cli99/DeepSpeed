@@ -14,11 +14,13 @@ def _init(service):
 
     config = Config(
         config={ # usually read from some yaml config
-            'sampler': {
+            'sampler': { # const type with param 1 configs all spans to be reported
                 'type': 'const',
                 'param': 1,
             },
-            'reporter_batch_size': 1,
+            'reporter_batch_size': 10,# default 10. Number of span to submit at once to the agent or collector
+            'reporter_queue_size': 1000, # default 100. Number of spans in memory buffer before batching them to the agent or collector
+            'reporter_flush_interval': 0.01, # default 1s. The interval to trigger a flush, sending all in-memory spans to the agent or collector
             'local_agent': {
                 'reporting_host': '10.124.76.134',
                 # 'reporting_port': '16686',
@@ -52,10 +54,9 @@ class XSP:
 
     def __init__(self, level=TraceLevel.DISABLED, service="deepspeed"):
         print("initialized tracer...")
-        self.spans = {}
         self.tracer = _init(service)
         self.level = level
-        atexit.register(self.close)
+        # atexit.register(self.close)
 
     def start_span(self, level, *args, **kwargs):
         if level > self.level:
@@ -63,6 +64,7 @@ class XSP:
         return self.tracer.start_span(*args, **kwargs)
 
     def start_profile(self, *args, **kwargs):
+        print("XXXX start xsp profiling")
         if self.started:
             print("xsp has already started")
             return
@@ -72,10 +74,11 @@ class XSP:
             self.started = True
 
     def end_profile(self, *args, **kwargs):
+        print("XXXX end xsp profiling")
         self.started = False
         if self.level > int(TraceLevel.DISABLED):
             self.root_span.finish()
-        # self.close()
+        self.close()
 
     def close(self):
         print("closing tracer...")
