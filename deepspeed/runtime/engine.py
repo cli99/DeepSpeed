@@ -131,7 +131,7 @@ class DeepSpeedEngine(Module):
         self._configure_with_arguments(args, mpu)
         self._do_sanity_check()
 
-        self.xsp = XSP(self.xsp_level())
+        self.xsp = XSP(level=self.xsp_level(), show_stack=self.xsp_show_stack())
         # import json
         # tracer_json = json.dumps(self.xsp.tracer)
         # print_rank_0(tracer_json)
@@ -383,7 +383,13 @@ class DeepSpeedEngine(Module):
         return self._config.xsp_config.enabled
 
     def xsp_level(self):
-        return 0 if self.xsp_enabled() == False else self._config.xsp_config.level
+        return 0 if not self.xsp_enabled() else self._config.xsp_config.level
+
+    def xsp_max_event_duration(self):
+        return self._config.xsp_config.max_event_duration
+
+    def xsp_show_stack(self):
+        return False if not self.xsp_enabled() else self._config.xsp_config.show_stack
 
     def xsp_start_step(self):
         return self._config.xsp_config.start_step
@@ -960,18 +966,22 @@ class DeepSpeedEngine(Module):
             # print(prof.key_averages().table(sort_by="self_cpu_time_total"))
 
             if prof is not None:
-                max_src_column_width = 75
                 for event in prof.function_events:
-                    if (event.cpu_interval.end - event.cpu_interval.start) < 1000:
+                    if (event.cpu_interval.end - event.cpu_interval.start
+                        ) < self.xsp_max_event_duration() * 1000:
                         continue
+                    tags = {
+                        'node_id': event.node_id,
+                        'thread_id': event.thread,
+                        'source': event.stack[0],
+                    }
+                    if self.xsp_show_stack():
+                        tags["stack"] = event.stack[1:]
+                        # time.sleep(0.01)
                     span = self.xsp.start_span(
                         TraceLevel.FRAMEWORK,
                         event.name,
-                        tags={
-                            "source": event.stack[0],
-                            'node_id': event.node_id,
-                            'thread_id': event.thread
-                        },
+                        tags=tags,
                         child_of=fwd_span,
                         start_time=self.xsp.start_time +
                         event.cpu_interval.start / 1000000,
@@ -980,7 +990,6 @@ class DeepSpeedEngine(Module):
                                 event.cpu_interval.end / 1000000)
         else:
             loss = self.module(*inputs, **kwargs)
-        # time.sleep(1)
         fwd_span.finish()
 
         if self.wall_clock_breakdown():

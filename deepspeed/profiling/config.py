@@ -58,6 +58,8 @@ class DeepSpeedXSPConfig(object):
 
         self.enabled = None
         self.level = None
+        self.show_stack = None
+        self.max_event_duration = None
 
         if XSP in param_dict.keys():
             xsp_dict = param_dict[XSP]
@@ -69,6 +71,12 @@ class DeepSpeedXSPConfig(object):
     def _initialize(self, xsp_dict):
         self.enabled = get_scalar_param(xsp_dict, XSP_ENABLED, XSP_ENABLED_DEFAULT)
         self.level = get_scalar_param(xsp_dict, XSP_LEVEL, XSP_LEVEL_DEFAULT)
+        self.max_event_duration = get_scalar_param(xsp_dict,
+                                                   XSP_MAX_EVENT_DURATION,
+                                                   XSP_MAX_EVENT_DURATION_DEFAULT)
+        self.show_stack = get_scalar_param(xsp_dict,
+                                           XSP_SHOW_STACK,
+                                           XSP_SHOW_STACK_DEFAULT)
         self.start_step = get_scalar_param(xsp_dict,
                                            XSP_START_STEP,
                                            XSP_START_STEP_DEFAULT)

@@ -51,11 +51,14 @@ class NoOpSpan:
 
 class XSP:
     started = False
+    max_stack_entry = 5
+    show_stack = False
 
-    def __init__(self, level=TraceLevel.DISABLED, service="deepspeed"):
+    def __init__(self, level=TraceLevel.DISABLED, show_stack=False, service="deepspeed"):
         print("initialized tracer...")
         self.tracer = _init(service)
         self.level = level
+        self.show_stack = show_stack
         # atexit.register(self.close)
 
     def start_span(self, level, *args, **kwargs):

@@ -49,6 +49,8 @@ xsp should be enabled as:
   "xsp": {
     "enalbe": [true|false],
     "level": 0,
+    "max_event_duration": 0.5,
+    "show_stack": [true|false],
     "start_step": 5,
     "end_step": 6,
     }
@@ -62,6 +64,12 @@ XSP_ENABLED_DEFAULT = False
 
 XSP_LEVEL = "level"
 XSP_LEVEL_DEFAULT = 0
+
+XSP_MAX_EVENT_DURATION = "max_event_duration"
+XSP_MAX_EVENT_DURATION_DEFAULT = 0.5
+
+XSP_SHOW_STACK = "show_stack"
+XSP_SHOW_STACK_DEFAULT = False
 
 XSP_START_STEP = "start_step"
 XSP_START_STEP_DEFAULT = 5
