@@ -941,12 +941,6 @@ class DeepSpeedEngine(Module):
         ) and not self.xsp.started and self.global_steps == self.xsp_start_step():
             self.xsp.start_profile()
 
-            # root_span = self.xsp.root_span
-            # tsr = torch.tensor(root_span, device=torch.cuda())
-            # torch.distributed.broadcast(tsr, src=0)
-            # root_span = int(tsr.item())
-            # self.xsp.root_span = root_span
-
         fwd_span = NoOpSpan
         if self.xsp_profile_step():
             fwd_span = self.xsp.start_span(
@@ -958,14 +952,14 @@ class DeepSpeedEngine(Module):
             # Enabling memory profiling or source attribution incurs additional profiler overhead
             with torch.autograd.profiler.profile(
                     self.xsp_level() >= TraceLevel.FRAMEWORK,
-                    use_cuda=False,
+                    use_cuda=True,
                     with_stack=True,
-                    profile_memory=False) as prof:
-                # self.xsp.start_time = time.time()
+                    profile_memory=True,
+            ) as prof:
                 loss = self.module(*inputs, **kwargs)
             # print(prof.key_averages().table(sort_by="self_cpu_time_total"))
 
-            if prof is not None:
+            if False and prof is not None:
                 for event in prof.function_events:
                     if (event.cpu_interval.end - event.cpu_interval.start
                         ) < self.xsp_max_event_duration() * 1000:
@@ -973,11 +967,24 @@ class DeepSpeedEngine(Module):
                     tags = {
                         'node_id': event.node_id,
                         'thread_id': event.thread,
+                        'is_async': event.is_async,
+                        'cpu_time_total': event.cpu_time_total,
+                        'cuda_time_total': event.cuda_time_total,
+                        'self_cpu_time_total': event.self_cpu_time_total,
+                        'self_cuda_time_total': event.self_cuda_time_total,
+                        'input_shapes': event.input_shapes,
                         'source': event.stack[0],
+                        'cpu_memory_usage': event.cpu_memory_usage,
+                        'cuda_memory_usage': event.cuda_memory_usage,
+                        'self_cpu_memory_usage': event.self_cpu_memory_usage,
+                        'self_cuda_memory_usage': event.self_cuda_memory_usage,
                     }
                     if self.xsp_show_stack():
                         tags["stack"] = event.stack[1:]
                         # time.sleep(0.01)
+                    # if len(event.kernels):
+                    #     tags['kerenls'] = [each.name for each in event.kernels]
+
                     span = self.xsp.start_span(
                         TraceLevel.FRAMEWORK,
                         event.name,
@@ -986,8 +993,19 @@ class DeepSpeedEngine(Module):
                         start_time=self.xsp.start_time +
                         event.cpu_interval.start / 1000000,
                     )
-                    span.finish(finish_time=self.xsp.start_time +
-                                event.cpu_interval.end / 1000000)
+                    # for k in event.kernels:
+                    #     kspan = self.xsp.start_span(
+                    #         TraceLevel.FRAMEWORK,
+                    #         k.name,
+                    #         tags={'name': k.name},
+                    #         child_of=span,
+                    #         start_time=self.xsp.start_time + k.interval.start / 1000000,
+                    #     )
+                    #     kspan.finish(finish_time=self.xsp.start_time +
+                    #                  (k.interval.start + k.interval.elapsed_us())/ 1000000)
+                    span.finish(
+                        finish_time=self.xsp.start_time +
+                        (event.cpu_interval.start + event.cpu_interval.end) / 1000000)
         else:
             loss = self.module(*inputs, **kwargs)
         fwd_span.finish()
