@@ -10,16 +10,13 @@ import pytest
 import deepspeed
 import deepspeed.runtime.utils as ds_utils
 
+
 from deepspeed.runtime.pipe.topology import PipeDataParallelTopology, PipeModelDataParallelTopology
 PipeTopo = PipeDataParallelTopology
 import deepspeed.runtime.pipe.module as PipelineModule
 from deepspeed.runtime.pipe.module import LayerSpec
 
 from common import distributed_test
-
-pytest.skip(
-    "skipping until we can figure out what's causing these to hang inside our CI",
-    allow_module_level=True)
 
 
 def rel_diff(A, B):
