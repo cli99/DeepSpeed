@@ -6,16 +6,6 @@ Licensed under the MIT license.
 import torch
 import json
 import copy
-<<<<<<< HEAD
-from deepspeed.runtime.constants import *
-from deepspeed.runtime.fp16.loss_scaler import INITIAL_LOSS_SCALE, SCALE_WINDOW, DELAYED_SHIFT, MIN_LOSS_SCALE
-from deepspeed.runtime.config_utils import get_scalar_param, dict_raise_error_on_duplicate_keys
-from deepspeed.runtime.zero.config import DeepSpeedZeroConfig
-from deepspeed.runtime.zero.constants import *
-from deepspeed.runtime.activation_checkpointing.config import DeepSpeedActivationCheckpointingConfig
-from deepspeed.utils import logger
-from deepspeed.profiling.config import DeepSpeedFlopsProfilerConfig, DeepSpeedXSPConfig
-=======
 
 from .constants import *
 from .fp16.loss_scaler import INITIAL_LOSS_SCALE, SCALE_WINDOW, DELAYED_SHIFT, MIN_LOSS_SCALE
@@ -32,8 +22,7 @@ from ..elasticity.config import ElasticityConfigError
 from ..elasticity.constants import ELASTICITY, IGNORE_NON_ELASTIC_BATCH_INFO, \
     IGNORE_NON_ELASTIC_BATCH_INFO_DEFAULT
 
-from ..profiling.config import DeepSpeedFlopsProfilerConfig
->>>>>>> origin/master
+from ..profiling.config import DeepSpeedFlopsProfilerConfig, DeepSpeedXSPConfig
 
 TENSOR_CORE_ALIGN_SIZE = 8
 
