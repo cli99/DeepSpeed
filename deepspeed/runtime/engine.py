@@ -883,18 +883,18 @@ class DeepSpeedEngine(Module):
                 "forward",
                 tags={"module_name": type(self.module).__name__},
                 child_of=self.xsp.root_span)
+            fwd_start_time = time.time()
 
             # Enabling memory profiling or source attribution incurs additional profiler overhead
             with torch.autograd.profiler.profile(
                     self.xsp_level() >= TraceLevel.FRAMEWORK,
-                    use_cuda=True,
+                    use_cuda=False,
                     with_stack=True,
                     profile_memory=True,
             ) as prof:
                 loss = self.module(*inputs, **kwargs)
-            # print(prof.key_averages().table(sort_by="self_cpu_time_total"))
 
-            if False and prof is not None:
+            if prof is not None:
                 for event in prof.function_events:
                     if (event.cpu_interval.end - event.cpu_interval.start
                         ) < self.xsp_max_event_duration() * 1000:
@@ -916,17 +916,12 @@ class DeepSpeedEngine(Module):
                     }
                     if self.xsp_show_stack():
                         tags["stack"] = event.stack[1:]
-                        # time.sleep(0.01)
-                    # if len(event.kernels):
-                    #     tags['kerenls'] = [each.name for each in event.kernels]
-
                     span = self.xsp.start_span(
                         TraceLevel.FRAMEWORK,
                         event.name,
                         tags=tags,
                         child_of=fwd_span,
-                        start_time=self.xsp.start_time +
-                        event.cpu_interval.start / 1000000,
+                        start_time=fwd_start_time + event.cpu_interval.start / 1000000,
                     )
                     # for k in event.kernels:
                     #     kspan = self.xsp.start_span(
@@ -939,7 +934,7 @@ class DeepSpeedEngine(Module):
                     #     kspan.finish(finish_time=self.xsp.start_time +
                     #                  (k.interval.start + k.interval.elapsed_us())/ 1000000)
                     span.finish(
-                        finish_time=self.xsp.start_time +
+                        finish_time=fwd_start_time +
                         (event.cpu_interval.start + event.cpu_interval.end) / 1000000)
         else:
             loss = self.module(*inputs, **kwargs)
@@ -1011,30 +1006,80 @@ class DeepSpeedEngine(Module):
                 "backward",
                 tags={"module_name": type(self.module).__name__},
                 child_of=self.xsp.root_span)
+        bwd_start_time = time.time()
 
         if self.wall_clock_breakdown():
             self.timers('backward_inner_microstep').start()
             self.timers('backward_inner').start()
 
-        # with torchprof.Profile(self.module, xsp.get_tracer(), use_cuda=False) as prof:
-        # with torch.autograd.profiler.profile(self.module, use_cuda=False) as prof:
-        if self.zero_optimization():
-            self.optimizer.is_gradient_accumulation_boundary = self.is_gradient_accumulation_boundary(
-            )
-            self.optimizer.backward(loss)
-        elif self.amp_enabled():
-            # AMP requires delaying unscale when inside gradient accumulation boundaries
-            # https://nvidia.github.io/apex/advanced.html#gradient-accumulation-across-iterations
-            delay_unscale = not self.is_gradient_accumulation_boundary()
-            with amp.scale_loss(loss,
-                                self.optimizer,
-                                delay_unscale=delay_unscale) as scaled_loss:
-                scaled_loss.backward()
-        elif self.fp16_enabled():
-            self.optimizer.backward(loss)
-        else:
-            loss.backward()
+        with torch.autograd.profiler.profile(
+                self.xsp_level() >= TraceLevel.FRAMEWORK,
+                use_cuda=False,
+                with_stack=True,
+                profile_memory=True,
+        ) as prof:
+            if self.zero_optimization():
+                self.optimizer.is_gradient_accumulation_boundary = self.is_gradient_accumulation_boundary(
+                )
+                self.optimizer.backward(loss)
+            elif self.amp_enabled():
+                # AMP requires delaying unscale when inside gradient accumulation boundaries
+                # https://nvidia.github.io/apex/advanced.html#gradient-accumulation-across-iterations
+                delay_unscale = not self.is_gradient_accumulation_boundary()
+                with amp.scale_loss(loss,
+                                    self.optimizer,
+                                    delay_unscale=delay_unscale) as scaled_loss:
+                    scaled_loss.backward()
+            elif self.fp16_enabled():
+                self.optimizer.backward(loss)
+            else:
+                loss.backward()
         # prof.export_chrome_trace("test.json")
+        if self.xsp_profile_step() and prof is not None:
+            for event in prof.function_events:
+                if (event.cpu_interval.end -
+                        event.cpu_interval.start) < self.xsp_max_event_duration() * 1000:
+                    continue
+                tags = {
+                    'node_id': event.node_id,
+                    'thread_id': event.thread,
+                    'is_async': event.is_async,
+                    'cpu_time_total': event.cpu_time_total,
+                    'cuda_time_total': event.cuda_time_total,
+                    'self_cpu_time_total': event.self_cpu_time_total,
+                    'self_cuda_time_total': event.self_cuda_time_total,
+                    'input_shapes': event.input_shapes,
+                    'cpu_memory_usage': event.cpu_memory_usage,
+                    'cuda_memory_usage': event.cuda_memory_usage,
+                    'self_cpu_memory_usage': event.self_cpu_memory_usage,
+                    'self_cuda_memory_usage': event.self_cuda_memory_usage,
+                }
+                if event.stack and self.xsp_show_stack():
+                    tags["stack"] = event.stack[:]
+                    # time.sleep(0.01)
+                # if len(event.kernels):
+                #     tags['kerenls'] = [each.name for each in event.kernels]
+
+                span = self.xsp.start_span(
+                    TraceLevel.FRAMEWORK,
+                    event.name,
+                    tags=tags,
+                    child_of=bwd_span,
+                    start_time=bwd_start_time + event.cpu_interval.start / 1000000,
+                )
+                # for k in event.kernels:
+                #     kspan = self.xsp.start_span(
+                #         TraceLevel.FRAMEWORK,
+                #         k.name,
+                #         tags={'name': k.name},
+                #         child_of=span,
+                #         start_time=self.xsp.start_time + k.interval.start / 1000000,
+                #     )
+                #     kspan.finish(finish_time=self.xsp.start_time +
+                #                  (k.interval.start + k.interval.elapsed_us())/ 1000000)
+                span.finish(
+                    finish_time=bwd_start_time +
+                    (event.cpu_interval.start + event.cpu_interval.end) / 1000000)
 
         if self.wall_clock_breakdown():
             self.timers('backward_inner').stop()

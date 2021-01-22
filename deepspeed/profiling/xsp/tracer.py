@@ -22,12 +22,12 @@ def _init(service):
             'reporter_queue_size': 1000, # default 100. Number of spans in memory buffer before batching them to the agent or collector
             'reporter_flush_interval': 0.01, # default 1s. The interval to trigger a flush, sending all in-memory spans to the agent or collector
             'local_agent': {
-                'reporting_host': '10.124.76.134',
+                'reporting_host': 'localhost',
                 # 'reporting_port': '16686',
             },
             'logging': False,
         },
-        service_name='deepspeed',
+        service_name=service,
         validate=True,
     )
     # this call also sets opentracing.tracer
@@ -53,12 +53,17 @@ class XSP:
     started = False
     max_stack_entry = 5
     show_stack = False
+    service_name = ""
 
-    def __init__(self, level=TraceLevel.DISABLED, show_stack=False, service="deepspeed"):
+    def __init__(self,
+                 level=TraceLevel.DISABLED,
+                 show_stack=False,
+                 service_name="deepspeed"):
         print("initialized tracer...")
-        self.tracer = _init(service)
+        self.tracer = _init(service_name)
         self.level = level
         self.show_stack = show_stack
+        self.service_name = service_name
         # atexit.register(self.close)
 
     def start_span(self, level, *args, **kwargs):
@@ -67,7 +72,7 @@ class XSP:
         return self.tracer.start_span(*args, **kwargs)
 
     def start_profile(self, *args, **kwargs):
-        print("XXXX start xsp profiling")
+        print(self.service_name, "XXXX start xsp profiling")
         if self.started:
             print("xsp has already started")
             return
@@ -76,8 +81,11 @@ class XSP:
             self.start_time = time.time()
             self.started = True
 
+    def set_start_time(self, t):
+        self.start_time = t
+
     def end_profile(self, *args, **kwargs):
-        print("XXXX end xsp profiling")
+        print(self.service_name, "XXXX end xsp profiling")
         self.started = False
         if self.level > int(TraceLevel.DISABLED):
             self.root_span.finish()
