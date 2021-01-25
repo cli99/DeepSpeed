@@ -134,7 +134,6 @@ class DeepSpeedEngine(Module):
         self._configure_with_arguments(args, mpu)
         self._do_sanity_check()
 
-        self.xsp = XSP(level=self.xsp_level(), show_stack=self.xsp_show_stack())
         # import json
         # tracer_json = json.dumps(self.xsp.tracer)
         # print_rank_0(tracer_json)
@@ -228,6 +227,10 @@ class DeepSpeedEngine(Module):
         util_ops = UtilsBuilder().load()
         self.flatten = util_ops.flatten
         self.unflatten = util_ops.unflatten
+
+        self.xsp = XSP(model=self.module,
+                       level=self.xsp_level(),
+                       show_stack=self.xsp_show_stack())
 
     def get_batch_info(self):
         """ Get all training batch related settings.

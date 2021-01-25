@@ -3,6 +3,7 @@ import time
 from jaeger_client import Config
 import atexit
 from enum import IntEnum
+from functools import partial
 
 import opentracing
 # import opentracing
@@ -56,6 +57,7 @@ class XSP:
     service_name = ""
 
     def __init__(self,
+                 model,
                  level=TraceLevel.DISABLED,
                  show_stack=False,
                  service_name="deepspeed"):
@@ -64,6 +66,7 @@ class XSP:
         self.level = level
         self.show_stack = show_stack
         self.service_name = service_name
+        self.model = model
         # atexit.register(self.close)
 
     def start_span(self, level, *args, **kwargs):
@@ -80,6 +83,24 @@ class XSP:
             self.root_span = self.tracer.start_span("root")
             self.start_time = time.time()
             self.started = True
+
+            def register_module_hooks(module, xsp):
+                def pre_hook(module, input):
+                    span = xsp.start_span(
+                        TraceLevel.MODEL,
+                        module.__class__.__name__,
+                        child_of=xsp.root_span,
+                        # start_time=fwd_start_time + event.cpu_interval.start / 1000000,
+                    )
+                    module.span = span
+
+                def post_hook(module, input, output):
+                    module.span.finish()
+
+                module.__pre_hook_handle__ = module.register_forward_pre_hook(pre_hook)
+                module.__hook_handle__ = module.register_forward_hook(post_hook)
+
+            self.model.apply(partial(register_module_hooks, xsp=self))
 
     def set_start_time(self, t):
         self.start_time = t
