@@ -1,54 +1,24 @@
 # https://github.com/awslabs/sagemaker-debugger/blob/master/tests/pytorch/test_json_configs/test_hook_multi_collections.json
 
-from deepspeed.runtime.config_utils import get_scalar_param
-from deepspeed.profiling.constants import *
+from deepspeed.runtime.config_utils import get_scalar_param, get_list_param
+# from deepspeed.profiling.constants import *
 
 SMDEBUG_PROFILER_FORMAT = '''
 smdebug should be enabled as:
 {
   "session_params":{
     "smdebug":{
-      "enable":[
-        "true|false"
-      ],
-      "local_path":"/tmp/smdebug_output/",
+      "enable": true,
+      "local_path": "/tmp/smdebug_output/",
       "export_tensorboard":true,
-      "tensorboard_dir":"/tmp/tensorboard_dir",
+      "tensorboard_dir": "/tmp/tensorboard_dir",
       "hook_parameters":{
-        "save_all":false,
-        "reductions":"max, mean, variance",
-        "save_steps":"0,1,2,3",
-        "save_interval":10
+        "save_all": false,
+        "collections": "weights, gradients, biases, inputs, outputs",
+        "reductions": "max, mean, variance",
+        "save_steps": "0,1,2,3",
+        "save_interval": 10
       },
-      "CollectionConfigurations":[
-        {
-          "CollectionName":"weights"
-        },
-        {
-          "CollectionName":"biases"
-        },
-        {
-          "CollectionName":"gradients"
-        },
-        {
-          "CollectionName":"default"
-        },
-        {
-          "CollectionName":"ReluActivation",
-          "CollectionParameters":{
-            "include_regex":"relu*",
-            "save_steps":"4, 5, 6"
-          }
-        },
-        {
-          "CollectionName":"fc1",
-          "CollectionParameters":{
-            "include_regex":"fc1*",
-            "save_steps":"7, 8, 9"
-          }
-        }
-      ]
-    }
   }
 }
 '''
@@ -57,6 +27,27 @@ SMDEBUG = "smdebug"
 
 SMDEBUG_ENABLED = "enabled"
 SMDEBUG_ENABLED_DEFAULT = False
+
+SMDEBUG_LOCAL_PATH = "local_path"
+SMDEBUG_LOCAL_PATH_DEFAULT = "/tmp/smdebug"
+
+SMDEBUG_EXPORT_TENSORBOARD = "enabled"
+SMDEBUG_EXPORT_TENSORBOARD_DEFAULT = False
+
+SMDEBUG_TENSORBOARD_DIR = "export_tensorboard"
+SMDEBUG_TENSORBOARD_DIR_DEFAULT = "/tmp/tensorboard"
+
+SMDEBUG_SAVE_ALL = "save_all"
+SMDEBUG_SAVE_ALL_DEFAULT = False
+
+SMDEBUG_SAVE_STEPS = "save_steps"
+SMDEBUG_SAVE_STEPS_DEFAULT = None
+
+SMDEBUG_SAVE_INTERVALS = "save_intervals"
+SMDEBUG_SAVE_INTERVALS_DEFAULT = 100
+
+SMDEBUG_COLLECTIONS = "collections"
+SMDEBUG_COLLECTIONS_DEFAULT = None
 
 
 class DeepSpeedSmdebugConfig(object):
@@ -71,6 +62,8 @@ class DeepSpeedSmdebugConfig(object):
         self.export_tensorboard = None
         self.tensorboard_dir = None
         self.save_all = None
+        self.collections = None
+        self.save_interval = None
 
         if SMDEBUG in param_dict.keys():
             smdebug_dict = param_dict[SMDEBUG]
@@ -99,7 +92,20 @@ class DeepSpeedSmdebugConfig(object):
                                                 SMDEBUG_TENSORBOARD_DIR,
                                                 SMDEBUG_TENSORBOARD_DIR_DEFAULT)
 
-        hook_parameters_dict = smdebug_dict['hook_parameters']
+        hook_parameters_dict = smdebug_dict.get('hook_parameters', None)
+        print(hook_parameters_dict)
+
         self.save_all = get_scalar_param(hook_parameters_dict,
                                          SMDEBUG_SAVE_ALL,
-                                         SMDEBUG_SAVE_ALL)
+                                         SMDEBUG_SAVE_ALL_DEFAULT)
+
+        self.save_intervals = get_scalar_param(hook_parameters_dict,
+                                               SMDEBUG_SAVE_INTERVALS,
+                                               SMDEBUG_SAVE_INTERVALS_DEFAULT)
+        self.collections = get_scalar_param(hook_parameters_dict,
+                                            SMDEBUG_COLLECTIONS,
+                                            SMDEBUG_COLLECTIONS_DEFAULT)
+        print(self.collections)
+
+        assert self.collections == "weights, gradients, biases, inputs, outputs"
+        # assert False
