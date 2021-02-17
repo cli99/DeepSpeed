@@ -49,6 +49,13 @@ SMDEBUG_SAVE_INTERVALS_DEFAULT = 100
 SMDEBUG_COLLECTIONS = "collections"
 SMDEBUG_COLLECTIONS_DEFAULT = None
 
+SMDEBUG_REDUCTIONS = "reductions"
+SMDEBUG_REDUCTIONS_DEFAULT = None
+
+
+def parse_list(str):
+    return str.replace(' ', '').split(",")
+
 
 class DeepSpeedSmdebugConfig(object):
     def __init__(self, param_dict):
@@ -62,8 +69,9 @@ class DeepSpeedSmdebugConfig(object):
         self.export_tensorboard = None
         self.tensorboard_dir = None
         self.save_all = None
-        self.collections = None
         self.save_interval = None
+        self.collections = None
+        self.reductions = None
 
         if SMDEBUG in param_dict.keys():
             smdebug_dict = param_dict[SMDEBUG]
@@ -99,13 +107,18 @@ class DeepSpeedSmdebugConfig(object):
                                          SMDEBUG_SAVE_ALL,
                                          SMDEBUG_SAVE_ALL_DEFAULT)
 
-        self.save_intervals = get_scalar_param(hook_parameters_dict,
-                                               SMDEBUG_SAVE_INTERVALS,
-                                               SMDEBUG_SAVE_INTERVALS_DEFAULT)
-        self.collections = get_scalar_param(hook_parameters_dict,
-                                            SMDEBUG_COLLECTIONS,
-                                            SMDEBUG_COLLECTIONS_DEFAULT)
-        print(self.collections)
+        # https://github.com/awslabs/sagemaker-debugger/blob/master/smdebug/core/save_config.py
+        self.save_interval = get_scalar_param(hook_parameters_dict,
+                                              SMDEBUG_SAVE_INTERVAL,
+                                              SMDEBUG_SAVE_INTERVAL_DEFAULT)
+        self.collections = parse_list(
+            get_scalar_param(hook_parameters_dict,
+                             SMDEBUG_COLLECTIONS,
+                             SMDEBUG_COLLECTIONS_DEFAULT))
 
-        assert self.collections == "weights, gradients, biases, inputs, outputs"
-        # assert False
+        # https://github.com/awslabs/sagemaker-debugger/blob/master/smdebug/core/reduction_config.py
+        self.reductions = parse_list(
+            get_scalar_param(hook_parameters_dict,
+                             SMDEBUG_REDUCTIONS,
+                             SMDEBUG_REDUCTIONS_DEFAULT))
+        print(self)

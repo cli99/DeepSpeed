@@ -27,7 +27,7 @@ def test_temp_config_json():
             "local_path": "dfs",
             "export_tensorboard": True,
             "hook_parameters": {
-                "save_all": False,
+                "save_all": True,
                 "collections": "weights, gradients, biases, inputs, outputs",
                 "reductions": "max, mean, variance",
                 "save_steps": "0,1,2,3",
@@ -37,5 +37,8 @@ def test_temp_config_json():
     }
     config_path = create_config_from_dict(tmpdir, config_dict)
     config_json = json.load(open(config_path, 'r'))
+    config = DeepSpeedSmdebugConfig(config_json)
 
-    print(DeepSpeedSmdebugConfig(config_json))
+    assert config.collections == "weights, gradients, biases, inputs, outputs"
+
+    assert False
