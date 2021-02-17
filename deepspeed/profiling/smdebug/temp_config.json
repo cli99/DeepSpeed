@@ -1,0 +1,1 @@
+{"smdebug": {"enable": true, "local_path": "dfs", "export_tensorboard": true, "hook_parameters": {"save_all": true, "collections": "weights, gradients, biases, inputs, outputs", "reductions": "max, mean, variance", "save_steps": "0,1,2,3", "save_interval": 10}}}

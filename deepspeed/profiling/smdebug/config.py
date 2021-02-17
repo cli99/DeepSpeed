@@ -57,12 +57,12 @@ def parse_list(str):
     return str.replace(' ', '').split(",")
 
 
-class DeepSpeedSmdebugConfig(object):
+class DeepSpeedDebuggerConfig(object):
     def __init__(self, param_dict):
         """
         docstring
         """
-        super(DeepSpeedSmdebugConfig, self).__init__()
+        super(DeepSpeedDebuggerConfig, self).__init__()
 
         self.enabled = None
         self.local_path = None

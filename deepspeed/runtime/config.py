@@ -636,6 +636,7 @@ class DeepSpeedConfig(object):
 
         self.wall_clock_breakdown = get_wall_clock_breakdown(param_dict)
         self.flops_profiler_config = DeepSpeedFlopsProfilerConfig(param_dict)
+        self.debugger_config = DeepSpeedDebuggerConfig(param_dict)
         self.memory_breakdown = get_memory_breakdown(param_dict)
         self.tensorboard_enabled = get_tensorboard_enabled(param_dict)
         self.tensorboard_output_path = get_tensorboard_output_path(param_dict)

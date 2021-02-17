@@ -41,6 +41,7 @@ from ..ops.adam import DeepSpeedCPUAdam
 from ..ops.adam import FusedAdam
 
 from deepspeed.profiling.flops_profiler.profiler import FlopsProfiler
+from deepspeed.profiling.smdebug.debugger import Debugger
 
 MEMORY_OPT_ALLREDUCE_SIZE = 500000000
 
@@ -161,6 +162,10 @@ class DeepSpeedEngine(Module):
             num_workers=self.dp_world_size,
             steps_per_output=self.steps_per_print(),
             monitor_memory=False)
+
+        # debugger
+        if self.debugger_enabled():
+            self.debugger = Debugger()
 
         if training_data:
             self.training_dataloader = self.deepspeed_io(training_data)
@@ -288,6 +293,9 @@ class DeepSpeedEngine(Module):
 
     def flops_profiler_detailed(self):
         return self._config.flops_profiler_config.detailed
+
+    def debugger_enabled(self):
+        return self._config.debugger_config.enabled
 
     def memory_breakdown(self):
         return self._config.memory_breakdown
