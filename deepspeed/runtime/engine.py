@@ -166,6 +166,7 @@ class DeepSpeedEngine(Module):
         # debugger
         if self.debugger_enabled():
             self.debugger = Debugger()
+            self.debugger.register_module(self.module)
 
         if training_data:
             self.training_dataloader = self.deepspeed_io(training_data)
@@ -295,6 +296,8 @@ class DeepSpeedEngine(Module):
         return self._config.flops_profiler_config.detailed
 
     def debugger_enabled(self):
+        print("aaaaaaaa", self._config.debugger_config.enabled)
+        print("aaaaaaaa", self._config.debugger_config)
         return self._config.debugger_config.enabled
 
     def memory_breakdown(self):

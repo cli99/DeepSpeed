@@ -9,7 +9,7 @@ smdebug should be enabled as:
   "session_params":{
     "smdebug":{
       "enable": true,
-      "local_path": "/tmp/smdebug_output/",
+      "output_dir": "/tmp/smdebug_output/",
       "export_tensorboard":true,
       "tensorboard_dir": "/tmp/tensorboard_dir",
       "hook_parameters":{
@@ -28,7 +28,7 @@ SMDEBUG = "smdebug"
 SMDEBUG_ENABLED = "enabled"
 SMDEBUG_ENABLED_DEFAULT = False
 
-SMDEBUG_LOCAL_PATH = "local_path"
+SMDEBUG_LOCAL_PATH = "output_dir"
 SMDEBUG_LOCAL_PATH_DEFAULT = "/tmp/smdebug"
 
 SMDEBUG_EXPORT_TENSORBOARD = "enabled"
@@ -43,8 +43,8 @@ SMDEBUG_SAVE_ALL_DEFAULT = False
 SMDEBUG_SAVE_STEPS = "save_steps"
 SMDEBUG_SAVE_STEPS_DEFAULT = None
 
-SMDEBUG_SAVE_INTERVALS = "save_intervals"
-SMDEBUG_SAVE_INTERVALS_DEFAULT = 100
+SMDEBUG_SAVE_INTERVAL = "save_intervals"
+SMDEBUG_SAVE_INTERVAL_DEFAULT = 100
 
 SMDEBUG_COLLECTIONS = "collections"
 SMDEBUG_COLLECTIONS_DEFAULT = None
@@ -101,7 +101,7 @@ class DeepSpeedDebuggerConfig(object):
                                                 SMDEBUG_TENSORBOARD_DIR_DEFAULT)
 
         hook_parameters_dict = smdebug_dict.get('hook_parameters', None)
-        print(hook_parameters_dict)
+        # print(hook_parameters_dict)
 
         self.save_all = get_scalar_param(hook_parameters_dict,
                                          SMDEBUG_SAVE_ALL,
@@ -121,4 +121,4 @@ class DeepSpeedDebuggerConfig(object):
             get_scalar_param(hook_parameters_dict,
                              SMDEBUG_REDUCTIONS,
                              SMDEBUG_REDUCTIONS_DEFAULT))
-        print(self)
+        # print(self)
