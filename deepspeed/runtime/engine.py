@@ -166,7 +166,15 @@ class DeepSpeedEngine(Module):
         # debugger
         if self.debugger_enabled():
             self.debugger = Debugger()
-            self.debugger.register_module(self.module)
+            self.debugger.register_module(
+                model=self.module,
+                output_dir=self.debugger_output_dir(),
+                export_tensorboard=self.debugger_export_tensorboard(),
+                save_all=self.debugger_save_all(),
+                collections=self.debugger_collections(),
+                reductions=self.debugger_reductions(),
+                norms=self.debugger_norms(),
+                save_interval=self.debugger_save_interval())
 
         if training_data:
             self.training_dataloader = self.deepspeed_io(training_data)
@@ -296,9 +304,28 @@ class DeepSpeedEngine(Module):
         return self._config.flops_profiler_config.detailed
 
     def debugger_enabled(self):
-        print("aaaaaaaa", self._config.debugger_config.enabled)
-        print("aaaaaaaa", self._config.debugger_config)
         return self._config.debugger_config.enabled
+
+    def debugger_output_dir(self):
+        return self._config.debugger_config.output_dir
+
+    def debugger_export_tensorboard(self):
+        return self._config.debugger_config.export_tensorboard
+
+    def debugger_save_all(self):
+        return self._config.debugger_config.save_all
+
+    def debugger_collections(self):
+        return self._config.debugger_config.collections
+
+    def debugger_reductions(self):
+        return self._config.debugger_config.reductions
+
+    def debugger_norms(self):
+        return self._config.debugger_config.norms
+
+    def debugger_save_interval(self):
+        return self._config.debugger_config.save_interval
 
     def memory_breakdown(self):
         return self._config.memory_breakdown

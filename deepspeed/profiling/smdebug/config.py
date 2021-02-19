@@ -28,23 +28,24 @@ SMDEBUG = "smdebug"
 SMDEBUG_ENABLED = "enabled"
 SMDEBUG_ENABLED_DEFAULT = False
 
-SMDEBUG_LOCAL_PATH = "output_dir"
-SMDEBUG_LOCAL_PATH_DEFAULT = "/tmp/smdebug"
+SMDEBUG_OUTPUT_DIR = "output_dir"
+SMDEBUG_OUTPUT_DIR_DEFAULT = None
 
 SMDEBUG_EXPORT_TENSORBOARD = "enabled"
 SMDEBUG_EXPORT_TENSORBOARD_DEFAULT = False
 
-SMDEBUG_TENSORBOARD_DIR = "export_tensorboard"
-SMDEBUG_TENSORBOARD_DIR_DEFAULT = "/tmp/tensorboard"
+# SMDEBUG_TENSORBOARD_DIR = "export_tensorboard"
+# SMDEBUG_TENSORBOARD_DIR_DEFAULT = "/tmp/tensorboard"
 
+# logs weights, biases, gradients and inputs/ouputs of the model
 SMDEBUG_SAVE_ALL = "save_all"
 SMDEBUG_SAVE_ALL_DEFAULT = False
 
 SMDEBUG_SAVE_STEPS = "save_steps"
 SMDEBUG_SAVE_STEPS_DEFAULT = None
 
-SMDEBUG_SAVE_INTERVAL = "save_intervals"
-SMDEBUG_SAVE_INTERVAL_DEFAULT = 100
+SMDEBUG_SAVE_INTERVAL = "save_interval"
+SMDEBUG_SAVE_INTERVAL_DEFAULT = 10
 
 SMDEBUG_COLLECTIONS = "collections"
 SMDEBUG_COLLECTIONS_DEFAULT = None
@@ -52,9 +53,23 @@ SMDEBUG_COLLECTIONS_DEFAULT = None
 SMDEBUG_REDUCTIONS = "reductions"
 SMDEBUG_REDUCTIONS_DEFAULT = None
 
+SMDEBUG_NORMS = "norms"
+SMDEBUG_NORMS_DEFAULT = None
+
+ALLOWED_REDUCTIONS = ["min", "max", "mean", "std", "variance", "sum", "prod"]
+ALLOWED_NORMS = ["l1", "l2"]
+ALLOWED_COLLECTIONS = [
+    "weights",
+    "gradients",
+    "biases",
+    "losses", # losses are logged in all cases
+    # "default", # default does not output nothing
+]
+
 
 def parse_list(str):
-    return str.replace(' ', '').split(",")
+    lst = str.replace(' ', '').split(",") if str else None
+    return lst
 
 
 class DeepSpeedDebuggerConfig(object):
@@ -65,7 +80,7 @@ class DeepSpeedDebuggerConfig(object):
         super(DeepSpeedDebuggerConfig, self).__init__()
 
         self.enabled = None
-        self.local_path = None
+        self.output_dir = None
         self.export_tensorboard = None
         self.tensorboard_dir = None
         self.save_all = None
@@ -88,17 +103,17 @@ class DeepSpeedDebuggerConfig(object):
                                         SMDEBUG_ENABLED,
                                         SMDEBUG_ENABLED_DEFAULT)
 
-        self.local_path = get_scalar_param(smdebug_dict,
-                                           SMDEBUG_LOCAL_PATH,
-                                           SMDEBUG_LOCAL_PATH_DEFAULT)
+        self.output_dir = get_scalar_param(smdebug_dict,
+                                           SMDEBUG_OUTPUT_DIR,
+                                           SMDEBUG_OUTPUT_DIR_DEFAULT)
 
         self.export_tensorboard = get_scalar_param(smdebug_dict,
                                                    SMDEBUG_EXPORT_TENSORBOARD,
                                                    SMDEBUG_EXPORT_TENSORBOARD_DEFAULT)
 
-        self.tensorboard_dir = get_scalar_param(smdebug_dict,
-                                                SMDEBUG_TENSORBOARD_DIR,
-                                                SMDEBUG_TENSORBOARD_DIR_DEFAULT)
+        # self.tensorboard_dir = get_scalar_param(smdebug_dict,
+        #                                         SMDEBUG_TENSORBOARD_DIR,
+        #                                         SMDEBUG_TENSORBOARD_DIR_DEFAULT)
 
         hook_parameters_dict = smdebug_dict.get('hook_parameters', None)
         # print(hook_parameters_dict)
@@ -121,4 +136,8 @@ class DeepSpeedDebuggerConfig(object):
             get_scalar_param(hook_parameters_dict,
                              SMDEBUG_REDUCTIONS,
                              SMDEBUG_REDUCTIONS_DEFAULT))
-        # print(self)
+
+        self.norms = parse_list(
+            get_scalar_param(hook_parameters_dict,
+                             SMDEBUG_NORMS,
+                             SMDEBUG_NORMS_DEFAULT))
