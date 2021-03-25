@@ -127,6 +127,9 @@ accepts a client state dictionary `client_sd` for saving. These items can be
 retrieved from `load_checkpoint` as a return argument. In the example above,
 the `step` value is stored as part of the `client_sd`.
 
+Important: all processes must call this method and not just the process with rank 0. It is because
+each process needs to save its master weights and scheduler+optimizer states. This method will hang
+waiting to synchronize with other processes if it's called just for the process with rank 0.
 
 ## DeepSpeed Configuration
 DeepSpeed features can be enabled, disabled, or configured using a config JSON
@@ -183,8 +186,8 @@ slots available.
 The following command launches a PyTorch training job across all available nodes and GPUs
 specified in `myhostfile`:
 ```bash
-deepspeed <client_entry.py> <client args> \
-  --deepspeed --deepspeed_config ds_config.json --hostfile=myhostfile
+deepspeed --hostfile=myhostfile <client_entry.py> <client args> \
+  --deepspeed --deepspeed_config ds_config.json
 ```
 
 Alternatively, DeepSpeed allows you to restrict distributed training of your model to a
@@ -261,3 +264,10 @@ not detected or passed in then DeepSpeed will query the number of GPUs on the
 local machine to discover the number of slots available. The `--include` and
 `--exclude` arguments work as normal, but the user should specify 'localhost'
 as the hostname.
+
+Also note that `CUDA_VISIBLE_DEVICES` can't be used with DeepSpeed to control
+which devices should be used. For example, to use only gpu1 of the current
+node, do:
+```bash
+deepspeed --include localhost:1 ...
+```
