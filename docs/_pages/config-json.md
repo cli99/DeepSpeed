@@ -32,10 +32,10 @@ title: "DeepSpeed Configuration JSON"
 
 ***optimizer***: [dictionary]
 
-| Fields | Value                                                                                                                                                                                                   | Example                      |
-| ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------- |
-| type   | The optimizer name. DeepSpeed natively supports **Adam**, **AdamW**, **OneBitAdam**, and **Lamb** optimizers and will import other optimizers from [torch](https://pytorch.org/docs/stable/optim.html). | `"Adam"`                     |
-| params | Dictionary of parameters to instantiate optimizer. The parameter names must match the optimizer constructor signature (e.g., for [Adam](https://pytorch.org/docs/stable/optim.html#torch.optim.Adam)).  | `{"lr": 0.001, "eps": 1e-8}` |
+| Fields | Value                                                                                                                                                                                                                                                                                        | Example                      |
+| ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------- |
+| type   | The optimizer name. DeepSpeed natively supports **Adam**, **AdamW**, **OneBitAdam**, and **Lamb** optimizers (See [here](https://deepspeed.readthedocs.io/en/latest/optimizers.html) for details) and will import other optimizers from [torch](https://pytorch.org/docs/stable/optim.html). | `"Adam"`                     |
+| params | Dictionary of parameters to instantiate optimizer. The parameter names must match the optimizer constructor signature (e.g., for [Adam](https://pytorch.org/docs/stable/optim.html#torch.optim.Adam)).                                                                                       | `{"lr": 0.001, "eps": 1e-8}` |
 
   Example of ***optimizer*** with Adam
 
@@ -60,7 +60,7 @@ The Adam optimizer also supports the following two params keys/values in additio
 | torch\_adam   | Use torch's implementation of adam instead of our fused adam implementation | false   |
 | adam\_w\_mode | Apply L2 regularization (also known as AdamW)                               | true    |
 
-  Another example of ***optimizer*** with 1-bit Adam specific parameters is as follows.
+  Another example of ***optimizer*** with 1-bit Adam
 
 ```json
 "optimizer": {
@@ -74,19 +74,28 @@ The Adam optimizer also supports the following two params keys/values in additio
       "eps": 1e-8,
       "weight_decay": 3e-7,
       "freeze_step": 400,
-      "cuda_aware": true
+      "cuda_aware": false,
+      "comm_backend_name": "nccl"
     }
   }
 ```
+
+The 1-bit Adam optimizer supports the following three params keys/values in addition to the standard Adam (learn more in our [tutorial](/tutorials/onebit-adam/)):
+
+| "params" key  | Description                                                                 | Default |
+| ------------- | --------------------------------------------------------------------------- | ------- |
+| freeze\_step   | Number of warm up steps before 1-bit compression gets applied to the communication | 100000   |
+| cuda\_aware | To indicate that the underlying MPI library supports CUDA-Aware communication         | false    |
+| comm\_backend\_name | To indicate which backend implementation to use                               | "nccl"   |
 
 ### Scheduler Parameters
 
 ***scheduler***: [dictionary]
 
-| Fields | Value                                                                                                                        | Example                                        |
-| ------ | ---------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
-| type   | The scheduler name. See [here](https://deepspeed.readthedocs.io/en/latest/deepspeed.pt.html) for list of support schedulers. | `"WarmupLR"`                                   |
-| params | Dictionary of parameters to instantiate scheduler. The parameter names should match scheduler constructor signature.         | `{"warmup_min_lr": 0, "warmup_max_lr": 0.001}` |
+| Fields | Value                                                                                                                      | Example                                        |
+| ------ | -------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
+| type   | The scheduler name. See [here](https://deepspeed.readthedocs.io/en/latest/schedulers.html) for list of support schedulers. | `"WarmupLR"`                                   |
+| params | Dictionary of parameters to instantiate scheduler. The parameter names should match scheduler constructor signature.       | `{"warmup_min_lr": 0, "warmup_max_lr": 0.001}` |
 
 Example of ***scheduler***
 
@@ -163,9 +172,9 @@ Example of ***scheduler***
 
 ***fp16:initial\_scale\_power***: [integer]
 
-| Description                                                                                                                                                                                                   | Default |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- |
-| ***initial\_loss\_scale\_power*** is a **fp16** parameter representing the power of the initial dynamic loss scale value. The actual loss scale is computed as 2<sup>***initial\_loss\_scale\_power***</sup>. | `32`    |
+| Description                                                                                                                                                                                       | Default |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- |
+| ***initial\_scale\_power*** is a **fp16** parameter representing the power of the initial dynamic loss scale value. The actual loss scale is computed as 2<sup>***initial\_scale\_power***</sup>. | `32`    |
 
 ***fp16:loss\_scale\_window***: [integer]
 
@@ -232,14 +241,22 @@ Example of ***scheduler***
 Enabling and configuring ZeRO memory optimizations
 ```json
   "zero_optimization": {
-    "stage": [0|1|2],
+    "stage": [0|1|2|3],
     "allgather_partitions": [true|false],
     "allgather_bucket_size": 5e8,
     "overlap_comm": false,
     "reduce_scatter": [true|false],
     "reduce_bucket_size": 5e8,
     "contiguous_gradients" : [true|false],
-    "cpu_offload": [true|false]
+    "cpu_offload": [true|false],
+    "cpu_offload_params" : [true|false],
+    "cpu_offload_use_pin_memory" : [true|false],
+    "stage3_max_live_parameters" : 1e9,
+    "stage3_max_reuse_distance" : 1e9,
+    "stage3_prefetch_bucket_size" : 5e8,
+    "stage3_param_persistence_threshold" : 1e6,
+    "sub_group_size" : 1e12,
+    "elastic_checkpoint" : [true|false]
     }
 ```
 
@@ -253,7 +270,7 @@ Enabling and configuring ZeRO memory optimizations
 
 | Description                                                                                                                                                           | Default |
 | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- |
-| Chooses different stages of ZeRO Optimizer. Stage 0, 1, and 2 refer to disabled, optimizer state partitioning, and optimizer+gradient state partitiong, respectively. | `0`     |
+| Chooses different stages of ZeRO Optimizer. Stage 0, 1, 2, and 3 refer to disabled, optimizer state partitioning, and optimizer+gradient state partitioning, and optimizer+gradient+parameter partitioning, respectively. | `0`     |
 
 ***allgather_partitions***: [boolean]
 
@@ -296,6 +313,42 @@ Enabling and configuring ZeRO memory optimizations
 | Description                                                                                                              | Default |
 | ------------------------------------------------------------------------------------------------------------------------ | ------- |
 | Enable offloading of optimizer memory and computation to CPU. This frees up GPU memory for larger models or batch sizes. | `False` |
+
+***cpu_offload_params***: [boolean]
+
+| Description                                                                                                                       | Default |
+| --------------------------------------------------------------------------------------------------------------------------------- | ------- |
+| Enable offloading of model parameters to CPU. This frees up GPU memory for larger models or batch sizes. Valid only with stage 3. | `False` |
+
+***cpu_offload_use_pin_memory***: [boolean]
+
+| Description                                                                               | Default |
+| ----------------------------------------------------------------------------------------- | ------- |
+| Use pinned CPU memory when offloading. Can improve performance. Valid only with stage 3.  | `False` |
+
+***stage3_max_live_parameters***: [integer]
+
+| Description                                                                                                                           | Default |
+| ------------------------------------------------------------------------------------------------------------------------------------- | ------- |
+| The maximum number of parameters resident per GPU before releasing. Smaller values use less memory, but perform more communication. | `1e9`   |
+
+***stage3_max_reuse_distance***: [integer]
+
+| Description                                                                                                      | Default |
+| ---------------------------------------------------------------------------------------------------------------- | ------- |
+| Do not release a parameter if it will be reused within this threshold of parameters. Smaller values use less memory, but perform more communication. | `1e9`   |
+
+***stage3_prefetch_bucket_size***: [integer]
+
+| Description                                                                                                                     | Default |
+| ------------------------------------------------------------------------------------------------------------------------------- | ------- |
+| The size of the fixed buffer for prefetching parameters. Smaller values use less memory, but can increase stalls due to communication. | `5e8`   |
+
+
+***stage3_param_persistence_threshold***: [integer]
+| Description                                                                                                                                                          | Default |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- |
+| Do not partition parameters smaller than this threshold. Smaller values use less memory, but can greatly increase communication (especially latency-bound messages). | `1e6`   |
 
 
 ### Logging
