@@ -23,7 +23,7 @@ from ..elasticity.constants import ELASTICITY, IGNORE_NON_ELASTIC_BATCH_INFO, \
     IGNORE_NON_ELASTIC_BATCH_INFO_DEFAULT
 
 from ..profiling.config import DeepSpeedFlopsProfilerConfig
-from ..profiling.smdebug import DeepSpeedDebuggerConfig
+from ..profiling.debugger.config import DeepSpeedDebuggerConfig
 
 TENSOR_CORE_ALIGN_SIZE = 8
 

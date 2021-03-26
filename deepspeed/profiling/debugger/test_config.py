@@ -4,9 +4,10 @@ import pytest
 import json
 import argparse
 
-import deepspeed
-from deepspeed.runtime.config import DeepSpeedConfig
-from . import DeepSpeedSmdebugConfig
+# import deepspeed
+# from deepspeed.runtime.config import DeepSpeedConfig
+
+import deepspeed.profiling.debugger as db
 
 tmpdir = os.path.dirname(os.path.realpath(__file__))
 
@@ -22,7 +23,7 @@ def create_config_from_dict(tmpdir, config_dict):
 
 def test_temp_config_json():
     config_dict = {
-        "smdebug": {
+        "debugger": {
             "enable": True,
             "local_path": "dfs",
             "export_tensorboard": True,
@@ -37,7 +38,8 @@ def test_temp_config_json():
     }
     config_path = create_config_from_dict(tmpdir, config_dict)
     config_json = json.load(open(config_path, 'r'))
-    config = DeepSpeedSmdebugConfig(config_json)
+    config = db.DeepSpeedDebuggerConfig(config_json)
+    print(config)
 
     assert config.collections == "weights, gradients, biases, inputs, outputs"
 
