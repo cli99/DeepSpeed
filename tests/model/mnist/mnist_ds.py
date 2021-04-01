@@ -37,6 +37,31 @@ class Net(nn.Module):
         return output
 
 
+class NetwithVanishingGradients(nn.Module):
+    def __init__(self):
+        super(NetwithVanishingGradients, self).__init__()
+        self.conv1 = nn.Conv2d(1, 32, 3, 1, bias=False)
+        self.conv2 = nn.Conv2d(32, 64, 3, 1, bias=False)
+
+        self.fc1 = nn.Linear(9216, 128, bias=False)
+        self.fc2 = nn.Linear(128, 10, bias=False)
+
+    def forward(self, x):
+        ## Conv 1st Block
+        x = self.conv1(x)
+        x = torch.sigmoid(x)  ## Notice
+        x = self.conv2(x)
+        x = torch.sigmoid(x)  ## Notice
+        x = F.max_pool2d(x, 2)
+
+        x = torch.flatten(x, 1)
+        x = self.fc1(x)
+        x = torch.sigmoid(x)  ## Notice
+        x = self.fc2(x)
+        output = F.log_softmax(x, dim=1)
+        return output
+
+
 def get_lr(optimizer):
     for param_group in optimizer.param_groups:
         return param_group["lr"]
@@ -44,11 +69,15 @@ def get_lr(optimizer):
 
 def train(args, model, device, train_loader, optimizer, epoch):
     model.train()
+    criterion = nn.NLLLoss()
+
+    model.debugger.hook.register_loss(criterion)
+
     for batch_idx, (data, target) in enumerate(train_loader):
         data, target = data.to(device), target.to(device)
         optimizer.zero_grad()
         output = model(data)
-        loss = F.nll_loss(output, target)
+        loss = criterion(output, target)
         model.backward(loss)
         model.step()
 
@@ -60,14 +89,14 @@ def train(args, model, device, train_loader, optimizer, epoch):
                 100.0 * batch_idx / len(train_loader),
                 loss.item(),
             ))
-            model.summary_writer.add_scalar("train/loss",
-                                            loss.item(),
-                                            batch_idx + (epoch - 1) * len(train_loader))
-            model.summary_writer.add_scalar(
-                "train/lr",
-                get_lr(optimizer),
-                batch_idx + (epoch - 1) * len(train_loader),
-            )
+            # model.summary_writer.add_scalar("train/loss",
+            #                                 loss.item(),
+            #                                 batch_idx + (epoch - 1) * len(train_loader))
+            # model.summary_writer.add_scalar(
+            #     "train/lr",
+            #     get_lr(optimizer),
+            #     batch_idx + (epoch - 1) * len(train_loader),
+            # )
             if args.dry_run:
                 break
 
@@ -199,7 +228,7 @@ def main():
     train_loader = torch.utils.data.DataLoader(dataset1, **train_kwargs)
     test_loader = torch.utils.data.DataLoader(dataset2, **test_kwargs)
 
-    model = Net().to(device)
+    model = NetwithVanishingGradients().to(device)
     optimizer = optim.Adadelta(model.parameters(), lr=args.lr)
     scheduler = StepLR(optimizer, step_size=1, gamma=args.gamma)
 
