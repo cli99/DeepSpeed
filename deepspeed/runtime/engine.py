@@ -200,6 +200,7 @@ class DeepSpeedEngine(Module):
 
         # debugger
         if self.debugger_enabled():
+            logger.info(f"DeepSpeed debugger is enabled")
             self.debugger = Debugger()
             self.debugger.register_module(
                 model=self.module,

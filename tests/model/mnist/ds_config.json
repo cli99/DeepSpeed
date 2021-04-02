@@ -8,7 +8,7 @@
   },
   "debugger": {
     "enable": false,
-    "local_path": "dfs",
+    "local_path": "./db",
     "export_tensorboard": true,
     "hook_parameters": {
       "save_all": true,
