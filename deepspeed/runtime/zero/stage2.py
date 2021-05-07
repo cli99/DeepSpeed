@@ -359,8 +359,8 @@ class FP16_DeepSpeedZeroOptimizer(object):
         self.create_reduce_and_remove_grad_hooks()
 
         # we may have a way of fusing dynamic scale. Do not support for now
-        if self.dtype == torch.float or not dynamic_loss_scale:
-            loss_scale_value = 1.0 if self.dtype == torch.float else static_loss_scale
+        if self.dtype == torch.float or self.dtype == torch.bfloat16 or not dynamic_loss_scale:
+            loss_scale_value = 1.0 if self.dtype == torch.float or self.dtype == torch.bfloat16 else static_loss_scale
 
             self.dynamic_loss_scale = False
             self.loss_scaler = LossScaler(scale=loss_scale_value)
