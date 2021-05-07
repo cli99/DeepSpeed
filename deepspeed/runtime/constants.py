@@ -108,6 +108,17 @@ SPARSE_GRADIENTS = "sparse_gradients"
 SPARSE_GRADIENTS_DEFAULT = False
 
 #########################################
+# Data type
+#########################################
+
+DTYPE_FORMAT = '''
+Data type should be of the format:
+"dtype": ["fp16" | "fp32" | "bf16"]
+'''
+DTYPE = "dtype"
+DTYPE_DEFAULT = "fp16"
+
+#########################################
 # FP16 support
 #########################################
 # FP16 feature. By default, this feature is not enabled.

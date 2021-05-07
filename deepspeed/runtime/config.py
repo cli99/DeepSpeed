@@ -89,6 +89,10 @@ def get_amp_params(param_dict):
         return False
 
 
+def get_dtype(param_dict):
+    return get_scalar_param(param_dict, DTYPE, DTYPE_DEFAULT)
+
+
 def get_fp16_enabled(param_dict):
     if FP16 in param_dict.keys():
         return get_scalar_param(param_dict[FP16], FP16_ENABLED, FP16_ENABLED_DEFAULT)
@@ -625,6 +629,7 @@ class DeepSpeedConfig(object):
             param_dict)
 
         self.gradient_clipping = get_gradient_clipping(param_dict)
+        self.dtype = get_dtype(param_dict)
         self.fp16_enabled = get_fp16_enabled(param_dict)
         self.amp_enabled = get_amp_enabled(param_dict)
         self.amp_params = get_amp_params(param_dict)
