@@ -578,8 +578,11 @@ class DeepSpeedEngine(Module):
                          'ds_id') for param in self.module.parameters()]):
                 assert all([param.dtype == torch.half for param in self.module.parameters()]), "fp16 is enabled but one or several model parameters have dtype that is not fp16"
             self.module.half()
+        if self.dytpe == torch.bfloat16:
+            assert all([param.dtype == torch.bfloat16 for param in self.module.parameters()]), "bf16 is enabled but one or several model parameters do not have dtype of bf16"
+            self.module.to(torch.bfloat16)
         else:
-            assert all([param.dtype == torch.float or param.dtype == torch.bfloat16 for param in self.module.parameters()]), "fp16 is not enabled but one or several model parameters have dtype of fp16"
+            assert all([param.dtype == torch.float for param in self.module.parameters()]), "fp32 is enabled but one or several model parameters do not have dtype of fp32"
 
         if not self.dont_change_device:
             self.module.to(self.device)

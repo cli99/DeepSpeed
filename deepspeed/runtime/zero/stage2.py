@@ -791,9 +791,12 @@ class FP16_DeepSpeedZeroOptimizer(object):
         dest_buffer.copy_(param.grad.view(-1), non_blocking=True)
 
         if param_id not in self.accumulated_grads_in_cpu:
+            acc_type = param.dtype
+            if acc_type == torch.bfloat16:
+                acc_type = torch.float
             self.accumulated_grads_in_cpu[param_id] = torch.zeros(
                 param.numel(),
-                dtype=param.dtype,
+                dtype=acc_type,
                 device=self.device).pin_memory()
 
         self.accumulated_grads_in_cpu[param_id].add_(dest_buffer)
@@ -808,9 +811,12 @@ class FP16_DeepSpeedZeroOptimizer(object):
             param.numel())
 
         if param_id not in self.accumulated_grads_in_cpu:
+            acc_type = param.dtype
+            if acc_type == torch.bfloat16:
+                acc_type = torch.float
             self.accumulated_grads_in_cpu[param_id] = torch.zeros(
                 param.numel(),
-                dtype=param.dtype,
+                dtype=acc_type,
                 device=self.device).pin_memory()
 
         if self.micro_step_id > 0:
