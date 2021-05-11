@@ -196,7 +196,7 @@ empty_buffers = {}
 class InsertPostInitMethodToModuleSubClasses(object):
     def __init__(self, enabled=True, mem_efficient_linear=True, config=None, dtype=None):
         self.mem_efficient_linear = mem_efficient_linear
-        self.enabled = enable
+        self.enabled = enabled
         self._set_dtype(config, dtype)
         assert self.dtype in [torch.half, torch.float, torch.bfloat16], f"Invalid data type {self.dtype}, allowed values are [torch.half, torch.float, torch.bfloat16]"
 
